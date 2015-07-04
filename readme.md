@@ -3,7 +3,12 @@ Segmentation using geodesic distances
 
 This is a small project that explores if the solution to the heat equation can be
 used to segment white matter structures as defined by FreeSurfer's aseg.mgz based 
-on shape alone (FreeSurfer aseg.mgz).
+on shape alone (FreeSurfer aseg.mgz). The program reads in an mgz label
+file (unsigned char, type == 0) and three regions of interest as defined by their label
+number. It produces a floating point mgz file with simulated temperature values
+for each voxel for which the simulation was run. It can also export regions of
+interest that separate the simulated region into discreet regions at temperature
+iso-lines. 
 
 A structure that is bounded by two other non-intersecting structures can be subdivided
 by this module into a number of label that form shells from the first boundary segment
@@ -35,7 +40,6 @@ GLOBAL OPTIONS:
    --cpuprofile 	Specify a file to store profiling information
    --help, -h		show help
    --version, -v	print the version
-   
 ```
 
 The 'on' sub-command allows to specify a number of additional options:
@@ -52,14 +56,16 @@ DESCRIPTION:
 
    The --temp1 and --temp0 switches will fix the temperatures for labels in
    the volume to low and high. The --simulate switch identifies label for
-   which the heat distribution will be computed.
+   which the heat distribution will be simulated.
 
-   Most likely you will want to specify the --distancefield <N> option to generate
+   Most likely you will want to specify the --label <N> option to generate
    individual label based on the calculated distances. The segments are created
-   so that each has approximately the same number of voxel.
+   so that each region has approximately the same number of voxel. This operation
+   can only succeed if the simulation resulted in a suffient number of voxel
+   for each range of temperature values.
 
    Example:
-     heat --verbose on aseg.mgz --t0 1 --t0 2 --t1 4 --s 3 -s 5 --distancefield 3
+     heat --verbose on aseg.mgz --t0 1 --t0 2 --t1 4 --s 3 -s 5 --label 3
 
 OPTIONS:
    --temp0, --t0 [--temp0 option --temp0 option]	Identify segments which have a low temperature. Can be specified more than once.
@@ -67,6 +73,6 @@ OPTIONS:
    --simulate, -s [--simulate option --simulate option]	Segments for which the heat equation will be solved
    --stepsize "0.12"					Simulation step size, should be small enough to not get Inf values
    --iterations "100"					Number of iterations performed
-   --distancefield "3"					Create a distance field with N separations for the simulated segments
+   --label "3"						Create a distance field with N separations for the simulated segments
    --showAllTemps					Show all voxel temperatures, not just the simulated subset
 ```

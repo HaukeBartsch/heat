@@ -10,11 +10,20 @@ import "github.com/codegangsta/cli"
 func p( t string) {
   fmt.Println("> ", t)
 }
+// Profiling works by starting the program with:
+//    ./heat --verbose --cpuprofile "prof.prof" on aseg.mgz --t0 42 --t1 50 \
+//           --t1 43 --t1 77 --t1 63 --t1 44 --s 41 --s 51 --s 52 --s 49 \
+//           --s 62 --s 53 --s 54 --s 58 --iterations 200 --distancefield 8
+// followed by:
+//    go tool pprof heat prof.prof 
+//    list simulate
+//    web
 
+// Example calls:
 // ./heat on aseg.mgz --temp0 50 --temp0 11 --temp1 42 --temp1 3 --simulate 41 --simulate 2
 // ./heat on aseg.mgz --temp0 50 --temp0 77 --temp0 43 --temp0 38 --temp0 4 --temp0 11 --temp1 42 --temp1 3 --simulate 41 --simulate 2 --simulate 13 --simulate 12 --simulate 29 --simulate 30 --simulate 27 --simulate 10
-// single hemisphere (FreeSurfer label)
-//   ./heat --verbose on aseg.mgz --t0 42 --t1 50 --t1 43 --t1 77 --t1 63 --t1 44 --s 41 --s 51 --s 52 --s 49 --s 62 --s 53 --s 54 --s 58 --iterations "200"
+// Single hemisphere (FreeSurfer label):
+// ./heat --verbose on aseg.mgz --t0 42 --t1 50 --t1 43 --t1 77 --t1 63 --t1 44 --s 41 --s 51 --s 52 --s 49 --s 62 --s 53 --s 54 --s 58 --iterations "200"
 
 func main() {
 
@@ -44,12 +53,14 @@ func main() {
          Description: "Uses a label field (mgz-format) to solve the heat equation given a set of labels.\n\n" +
                       "   The --temp1 and --temp0 switches will fix the temperatures for labels in\n" +
                       "   the volume to low and high. The --simulate switch identifies label for\n" +
-                      "   which the heat distribution will be computed.\n\n" +
-                      "   Most likely you will want to specify the --distancefield <N> option to generate\n" +
+                      "   which the heat distribution will be simulated.\n\n" +
+                      "   Most likely you will want to specify the --label <N> option to generate\n" +
                       "   individual label based on the calculated distances. The segments are created\n" +
-                      "   so that each has approximately the same number of voxel.\n\n" +
+                      "   so that each region has approximately the same number of voxel. This operation\n" +
+                      "   can only succeed if the simulation resulted in a suffient number of voxel\n" +
+                      "   for each range of temperature values.\n\n" +
                       "   Example:\n" + 
-                      "     heat --verbose on aseg.mgz --t0 1 --t0 2 --t1 4 --s 3 -s 5 --distancefield 3" ,
+                      "     heat --verbose on aseg.mgz --t0 1 --t0 2 --t1 4 --s 3 -s 5 --label 3" ,
          Flags: []cli.Flag{
            cli.IntSliceFlag {
              Name: "temp0,t0",
@@ -77,7 +88,7 @@ func main() {
              Usage: "Number of iterations performed",
            },
            cli.IntFlag {
-             Name: "distancefield",
+             Name: "label",
              Value: 3,
              Usage: "Create a distance field with N separations for the simulated segments",
            },
@@ -117,15 +128,14 @@ func main() {
              
              field := simulate(labels, temp0, temp1, sim, float32(omega), iterations, c.Bool("showAllTemps"), verbose)
  
-             if c.IsSet("distancefield") {
+             d, f  := path.Split(c.Args()[0])
+             if c.IsSet("label") {
                // save a distance field version of the data (from low to high temperature in uniform intervals
-               distancefield := computeDistanceField(field, labels, sim, c.Int("distancefield"))
-               d, f  := path.Split(c.Args()[0])
-               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_distancefield.mgh")
-               saveMGHuint8(distancefield, fn, header, verbose)           
+               label := computeDistanceField(field, labels, sim, c.Int("label"))
+               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_label.mgh")
+               saveMGHuint8(label, fn, header, verbose)           
              }
              
-             d, f  := path.Split(c.Args()[0])
              fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_temperatur.mgh")
              saveMGH(field, fn, header, verbose)
            }
