@@ -96,6 +96,10 @@ func main() {
              Name: "showAllTemps",
              Usage: "Show all voxel temperatures, not just the simulated subset",
            },
+           cli.BoolFlag {
+             Name: "gradient",
+             Usage: "Create the gradient of the temperature field (nframes=3)",
+           },
          },
          Action: func(c *cli.Context) {
            if len(c.Args()) < 1 {
@@ -134,6 +138,13 @@ func main() {
                label := computeDistanceField(field, labels, sim, c.Int("label"))
                fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_label.mgh")
                saveMGHuint8(label, fn, header, verbose)           
+             }
+             
+             if c.IsSet("gradient") {
+               // save the gradient of the temperature field
+               gradient := computeGradientField(field, labels, sim)
+               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_gradient.mgh")
+               saveMGHgradient(gradient, fn, header, verbose)
              }
              
              fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_temperatur.mgh")

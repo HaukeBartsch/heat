@@ -258,10 +258,9 @@ func read2( file *os.File ) (int16) {
   return val
 }
 
-
 func saveMGH( field [][][]float32, fn string, head header, verbose bool) {
   if verbose {
-    p(fmt.Sprintf("start writing output file %s...", fn))
+    p(fmt.Sprintf("writing file %s...", fn))
   }
   // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
   fi, err := os.Create(fn)
@@ -317,14 +316,136 @@ func saveMGH( field [][][]float32, fn string, head header, verbose bool) {
     }
   }
   fi.Sync()
-  if verbose {
-    p(fmt.Sprintf("writing %s done", fn))
-  }
 }
+
+func saveMGHgradient(gradient [][][]float32, fn string, head header, verbose bool) {
+  if verbose {
+    p(fmt.Sprintf("writing file %s...", fn))
+  }
+  // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
+  fi, err := os.Create(fn)
+  if err != nil {
+     p(fmt.Sprintf("Error: could not open file %s", fn))
+     os.Exit(-1)
+  }
+  defer fi.Close()
+  
+  var typ int32
+  typ = 3 // save as floating point field
+  head.nframes = 3
+  save4(fi, head.version)
+  save4(fi, head.width)
+  save4(fi, head.height)
+  save4(fi, head.depth)
+  save4(fi, head.nframes)
+  save4(fi, typ)
+  save4(fi, head.dof)
+  save2(fi, head.goodRASFlag)
+  
+  save4float32(fi, head.vz[0])
+  save4float32(fi, head.vz[1])
+  save4float32(fi, head.vz[2])
+  save4float32(fi, head.Mdc[0])
+  save4float32(fi, head.Mdc[1])
+  save4float32(fi, head.Mdc[2])
+  save4float32(fi, head.Mdc[3])
+  save4float32(fi, head.Mdc[4])
+  save4float32(fi, head.Mdc[5])
+  save4float32(fi, head.Mdc[6])
+  save4float32(fi, head.Mdc[7])
+  save4float32(fi, head.Mdc[8])  
+  save4float32(fi, head.Pxyz[0])
+  save4float32(fi, head.Pxyz[1])
+  save4float32(fi, head.Pxyz[2])
+  
+  // go to byte 284 (did write 82 bytes so far)
+  for i := 0; i < (284-90); i++ {
+    var val uint8
+    val = 0
+    err := binary.Write(fi, binary.BigEndian, val)
+    if err != nil {
+       p(fmt.Sprintf("Error: could not write bytes to output"))
+    }
+  }
+  
+  // for mgz we need to save each frame individually
+  var dims [3]int
+  dims[2] = len(gradient)
+  dims[1] = len(gradient[0])
+  dims[0] = len(gradient[0][0])/3 // three components per voxel
+  // get the memory for a single component
+  gf := make([][][]float32, dims[2])
+  for i := range gf {
+    gf[i] = make([][]float32, dims[1])
+    for j := range gf[i] {
+      gf[i][j] = make([]float32, dims[0])
+    }
+  }
+
+  // copy first component into gf and save, repeat with the other components  
+  for k := range gf {
+    for j := range gf[k] {
+      for i := range gf[k][j] {
+        gf[k][j][i] = gradient[k][j][i*3+0]
+      }
+    }
+  }
+  
+  // now save the binary data
+  for k := range gf {
+    for j := range gf[k] {
+        err := binary.Write(fi, binary.BigEndian, gf[k][j][:])
+        if err != nil {
+           p(fmt.Sprintf("Error: could not write bytes to output"))          
+        }
+    }
+  }
+  
+  // copy second component into gf and save, repeat with the other components  
+  for k := range gf {
+    for j := range gf[k] {
+      for i := range gf[k][j] {
+        gf[k][j][i] = gradient[k][j][i*3+1]
+      }
+    }
+  }
+  
+  // now save the binary data
+  for k := range gf {
+    for j := range gf[k] {
+        err := binary.Write(fi, binary.BigEndian, gf[k][j][:])
+        if err != nil {
+           p(fmt.Sprintf("Error: could not write bytes to output"))          
+        }
+    }
+  }
+
+  // copy third component into gf and save, repeat with the other components  
+  for k := range gf {
+    for j := range gf[k] {
+      for i := range gf[k][j] {
+        gf[k][j][i] = gradient[k][j][i*3+2]
+      }
+    }
+  }
+  
+  // now save the binary data
+  for k := range gf {
+    for j := range gf[k] {
+        err := binary.Write(fi, binary.BigEndian, gf[k][j][:])
+        if err != nil {
+           p(fmt.Sprintf("Error: could not write bytes to output"))          
+        }
+    }
+  }
+  
+  fi.Sync()
+}
+
 
 func saveMGHuint8( field [][][]uint8, fn string, head header, verbose bool) {
   if verbose {
-    p(fmt.Sprintf("start writing output file %s...", fn))
+    p(fmt.Sprintf("writing file %s...", fn))
   }
   // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
   fi, err := os.Create(fn)
@@ -380,11 +501,103 @@ func saveMGHuint8( field [][][]uint8, fn string, head header, verbose bool) {
     }
   }
   fi.Sync()
-  if verbose {
-    p(fmt.Sprintf("writing %s done", fn))
-  }
 }
 
+// three components for each voxel
+func computeGradientField(field [][][]float32, labels [][][]uint8, simulate []int) ([][][]float32) {
+
+  var dims [3]int
+  dims[2] = len(labels)
+  dims[1] = len(labels[0])
+  dims[0] = len(labels[0][0]) // three components per voxel
+  // get the memory
+  gf := make([][][]float32, dims[2])
+  for i := range gf {
+    gf[i] = make([][]float32, dims[1])
+    for j := range gf[i] {
+      gf[i][j] = make([]float32, dims[0]*3)
+    }
+  }
+
+  simThese := make([][][]uint8, dims[2])
+  for k := range simThese {
+     simThese[k] = make([][]uint8, dims[1])
+     for j := range simThese[k] {
+       simThese[k][j] = make([]uint8, dims[0])
+       for i := range simThese[k][j] {
+          simThese[k][j][i] = 0
+          val := int(labels[k][j][i])
+          for l := range simulate {
+             if simulate[l] == val {
+                simThese[k][j][i] = 1 // only export distance for these voxel
+                break
+             }
+          }
+       }
+     }
+  }
+  
+  for k := 1; k < dims[2]-1; k++ {
+    for j := 1; j < dims[1]-1; j++ {
+      var a float32
+      var b float32
+      var d int
+      for i := 1; i < dims[0]-1; i++ {
+        if simThese[k][j][i] != 1 {
+          continue
+        }
+        // if we are at the border of a material we have to
+        // use the one sided gradient
+        a = field[k][j][i+1]
+        b = field[k][j][i-1]
+        d = 2
+        if simThese[k][j][i+1] == 0 {
+          a = field[k][j][i]
+          d = d - 1
+        }
+        if simThese[k][j][i-1] == 0 {
+          b = field[k][j][i]
+          d = d - 1
+        }
+        if d > 0 {
+          gf[k][j][i*3+0] = (a-b)/float32(d)
+        } // else should be zero
+
+        a = field[k][j+1][i]
+        b = field[k][j-1][i]
+        d = 2
+        if simThese[k][j+1][i] == 0 {
+          a = field[k][j][i]
+          d = d - 1
+        }
+        if simThese[k][j-1][i] == 0 {
+          b = field[k][j][i]
+          d = d - 1
+        }
+        if d > 0 {
+          gf[k][j][i*3+1] = (a-b)/float32(d)
+        } // else should be zero
+
+        a = field[k+1][j][i]
+        b = field[k-1][j][i]
+        d = 2
+        if simThese[k+1][j][i] == 0 {
+          a = field[k][j][i]
+          d = d - 1
+        }
+        if simThese[k-1][j][i] == 0 {
+          b = field[k][j][i]
+          d = d - 1
+        }
+        if d > 0 {
+          gf[k][j][i*3+2] = (a-b)/float32(d)
+        } // else should be zero
+      }
+    }
+  }
+  
+  return gf
+}
 
 func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []int, numsegments int) ( [][][]uint8 ){
   // store end of each segment

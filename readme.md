@@ -83,4 +83,5 @@ OPTIONS:
    --iterations "100"					Number of iterations performed
    --label "3"						Create a distance field with N separations for the simulated segments
    --showAllTemps					Show all voxel temperatures, not just the simulated subset
+   --gradient						Create the gradient of the temperature field (nframes=3)
 ```
