@@ -18,6 +18,14 @@ from the lateral ventricles to the cortical gray matter. Using the created label
 one can identify for example lesions that are close to either the ventricles, the cortical
 gray matter or at intermediate distances between both structures.
 
+Download binary:
+
+  * MacOS command line executable
+    https://github.com/HaukeBartsch/heat/raw/master/binary/MacOS/heat
+
+  * Linux64 command line executable
+    https://github.com/HaukeBartsch/heat/raw/master/binary/Linux64/heat
+
 ```
 NAME:
    heat - Solving the heat equation on a 3D grid
