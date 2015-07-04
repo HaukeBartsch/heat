@@ -3,6 +3,8 @@ package main
 import "fmt"
 import "os"
 import "path"
+import "log"
+import "runtime/pprof"
 import "github.com/codegangsta/cli"
 
 func p( t string) {
@@ -26,6 +28,11 @@ func main() {
        cli.BoolFlag {
          Name:  "verbose",
          Usage: "Generate verbose output with intermediate files.",
+       },
+       cli.StringFlag {
+         Name: "cpuprofile",
+         Value: "",
+         Usage: "Specify a file to store profiling information",
        },
      }
 
@@ -88,6 +95,17 @@ func main() {
                p("verbose on")
                p("run heat equation")
              }
+
+             if c.GlobalIsSet("cpuprofile") {
+               fn := c.GlobalString("cpuprofile")
+               f, err := os.Create(fn)
+               if err != nil {
+                 log.Fatal(err)
+               }
+               pprof.StartCPUProfile(f)
+               defer pprof.StopCPUProfile()
+             }
+
 
              labels, header := readMGH( c.Args()[0], verbose )
              

@@ -568,8 +568,9 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
     }
     for k := 1; k < dims[2]-1; k++ {
        for j := 1; j < dims[1]-1; j++ {
+         copy(tmp[k][j][:],f[k][j][:])
          for i := 1; i < dims[0]-1; i++ {
-            tmp[k][j][i] = f[k][j][i]
+            //tmp[k][j][i] = f[k][j][i]
             if simThese[k][j][i] != 1 {
               continue
             }
