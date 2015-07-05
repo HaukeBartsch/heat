@@ -8,7 +8,13 @@ file (unsigned char, type == 0) and three regions of interest as defined by thei
 number. It produces a floating point mgz file with simulated temperature values
 for each voxel for which the simulation was run. It can also export regions of
 interest that separate the simulated region into discreet regions at temperature
-iso-lines. 
+iso-lines.
+
+![Saggittal slice with heat distribution as color overlay and iso-lines](/images/freesurfer.png) 
+![Saggittal slice with heat distribution only (yellow, red to blue)](/images/heatdistribution.png) 
+![Saggittal slice with calculated distance label from ventricular space (red, green, magenta)](/images/label.png) 
+![Saggittal slice with distance label and calculated gradient field](/images/gradient.png) 
+
 
 A structure that is bounded by two other non-intersecting structures can be subdivided
 by this module into a number of label that form shells from the first boundary segment
