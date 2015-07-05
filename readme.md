@@ -16,7 +16,9 @@ to the second boundary segment. Topologically this corresponds to a sphere with 
 inside which has a third sphere inside. For example, the white matter of the human brain extends
 from the lateral ventricles to the cortical gray matter. Using the created label field
 one can identify for example lesions that are close to either the ventricles, the cortical
-gray matter or at intermediate distances between both structures.
+gray matter or, at intermediate distances between both structures.
+
+More information about the rationale for this program can be found at http://haukebartsch.github.io/heat/.
 
 Download binary:
 
