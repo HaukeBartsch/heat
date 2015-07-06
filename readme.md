@@ -5,10 +5,10 @@ This is a small project that explores if the solution to the heat equation can b
 used to segment white matter structures as defined by FreeSurfer's aseg.mgz based 
 on shape alone (FreeSurfer aseg.mgz). The program reads in an mgz label
 file (unsigned char, type == 0) and three regions of interest as defined by their label
-number. It produces a floating point mgz file with simulated temperature values
-for each voxel for which the simulation was run. It can also export regions of
-interest that separate the simulated region into discreet regions at temperature
-iso-lines.
+numbers. The program produces a floating point mgz file with simulated temperature values
+for each voxel. It can also export regions of interest that separate the simulated region
+into discreet regions at temperature iso-lines. Additionally the gradient of the temperature
+field can be exported as a three component vector field.
 
 ![Saggittal slice with heat distribution as color overlay and iso-lines](/images/freesurfer.png) 
 ![Saggittal slice with heat distribution only (yellow, red to blue)](/images/heatdistribution.png) 
