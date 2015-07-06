@@ -135,7 +135,7 @@ func main() {
              d, f  := path.Split(c.Args()[0])
              if c.IsSet("label") {
                // save a distance field version of the data (from low to high temperature in uniform intervals
-               label := computeDistanceField(field, labels, sim, c.Int("label"))
+               label := computeDistanceField(field, labels, sim, c.Int("label"), verbose)
                fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_label.mgh")
                saveMGHuint8(label, fn, header, verbose)           
              }

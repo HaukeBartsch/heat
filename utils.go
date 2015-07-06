@@ -599,7 +599,8 @@ func computeGradientField(field [][][]float32, labels [][][]uint8, simulate []in
   return gf
 }
 
-func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []int, numsegments int) ( [][][]uint8 ){
+// segment volume into distict regions based on heat value
+func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []int, numsegments int, verbose bool) ( [][][]uint8 ){
   // store end of each segment
   borders := make([]float32, numsegments-1) // keep a list of the (uniform distant) quantiles requested by the user
   for i := range borders {
@@ -622,6 +623,9 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
   // we will compute quantiles for the actual separations
   // we know that the temperature is between 0.01 and 0.1
   // lets define numsegments quantiles for the field values in every label of labels that is listed in simulate
+  maxVal := float32(0.01)
+  minVal := float32(0.1)
+
   simThese := make([][][]uint8, dims[2])
   for k := range simThese {
      simThese[k] = make([][]uint8, dims[1])
@@ -633,15 +637,24 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
           for l := range simulate {
              if simulate[l] == val {
                 simThese[k][j][i] = 1 // only export distance for these voxel
+                if field[k][j][i] < minVal {
+                  minVal = field[k][j][i]
+                }
+                if field[k][j][i] > maxVal {
+                  maxVal = field[k][j][i]
+                }
                 break
              }
           }
        }
      }
   }
+  if verbose {
+    p(fmt.Sprintf("Simulated heat values are %g .. %g (should be 0.01 .. 0.1)", minVal, maxVal))
+  }
 
   // collect a histogram of heat values (use it to compute a cummulative histogram later)
-  histresolution := 512
+  histresolution := 1024
   hist := make([]int, histresolution)
   for i := range hist { hist[i] = 0 } // explicitely set to zero
   for k := range field {
@@ -650,7 +663,7 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
         if simThese[k][j][i] == 0 {
           continue
         }
-        index := int( math.Floor( float64( ( (field[k][j][i] - 0.01) / (0.1-0.01)) * float32(histresolution-1) + 0.5) ))
+        index := int( math.Floor( float64( ( (field[k][j][i] - minVal) / (maxVal-minVal)) * float32(histresolution-1) + 0.5) ))
         if index < 0 {
           //fmt.Printf("should not happen %d %g \n", index, (field[k][j][i]))
           index = 0
@@ -677,7 +690,7 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
   for i := range cumhist {
      //fmt.Printf("val: %g\n", float64(cumhist[i])/float64(total))
      if float64(cumhist[i])/float64(total) > float64(borders[t]) {
-       thresholds[t] = float32(float64(0.01) + float64(0.1-0.01)*(float64(i)/float64(len(cumhist)-1.0)))
+       thresholds[t] = float32(float64(minVal) + float64(maxVal-minVal)*(float64(i)/float64(len(cumhist)-1.0)))
        //fmt.Printf("heat threshold value %d is %g hit at index %d\n", t, thresholds[t], i)
        t = t + 1
        if t >= len(borders) {
@@ -795,22 +808,22 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
             var val110 = f[k-1][j][i]
             var val112 = f[k+1][j][i]
             // repulsive boundary conditions for all other label
-            if labels[k][j-1][i] == 2 {
+            if simThese[k][j-1][i] == 2 {
               val101 = val121
             }
-            if labels[k][j+1][i] == 2 {
+            if simThese[k][j+1][i] == 2 {
               val121 = val211
             }
-            if labels[k][j][i-1] == 2 {
+            if simThese[k][j][i-1] == 2 {
               val011 = val211
             }
-            if labels[k][j][i+1] == 2 {
+            if simThese[k][j][i+1] == 2 {
               val211 = val011
             }
-            if labels[k-1][j][i] == 2 {
+            if simThese[k-1][j][i] == 2 {
               val110 = val112
             }
-            if labels[k+1][j][i] == 2 {
+            if simThese[k+1][j][i] == 2 {
               val112 = val110
             }
             tmp[k][j][i] = float32(1.0-6.0*omega)*val111 + omega*(val101 + val121 + val011 + val211 + val110 + val112)            
