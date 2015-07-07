@@ -34,6 +34,9 @@ Download binary:
   * Linux64 command line executable
     https://github.com/HaukeBartsch/heat/raw/master/binary/Linux64/heat
 
+  * Windows64 command line executable
+    https://github.com/HaukeBartsch/heat/raw/master/binary/Windows64/heat.exe
+
 ```
 NAME:
    heat - Solving the heat equation on a 3D grid
