@@ -110,6 +110,10 @@ func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
     p(fmt.Sprintf("Warning: only the first frame will be read"))    
   }
   
+  if head.t != 0 {
+    p(fmt.Sprintf("Error: could not find unsigned char field (0) but found %d", head.t))
+  }
+  
   // create the space for the label
   var dims [3]int32
   dims[0] = head.width
@@ -149,14 +153,30 @@ func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
   file.Seek(284, 0)
   // now read in the data (don't need to swap because its all unsigned char)
   buf := make([]byte, int64(dims[0])*int64(dims[1])*int64(dims[2]))
-  n, err := file.Read(buf)
-  if err != nil {
-    panic(err)
-  }
-  if int64(n) != int64(dims[0])*int64(dims[1])*int64(dims[2]) {
-    p(fmt.Sprintf("Error: could not read all data from file"))
+  ntotal := int64(0)
+  for {
+    // read several times because Read might decide to stop intermittently
+    buffer := make([]byte, int64(1024)*int64(1024)) // read a little bit
+    n, err := file.Read(buffer)
+    if ntotal + int64(n) > int64(dims[0])*int64(dims[1])*int64(dims[2]) {
+      n = int(int64(dims[0])*int64(dims[1])*int64(dims[2]) - ntotal)
+    }
+    
+    // copy to the real buffer buf
+    copy(buf[ntotal:(ntotal+int64(n))], buffer[0:n])
+    ntotal = ntotal + int64(n)
+
+    if err == io.EOF {
+      break;
+    }
+    if err != nil {
+      panic(err)
+    }
   }
   file.Sync()
+  if int64(ntotal) != int64(dims[0])*int64(dims[1])*int64(dims[2]) {
+    p(fmt.Sprintf("Error: could not read all data from file, found %d but wanted to read %d", ntotal, int64(dims[0])*int64(dims[1])*int64(dims[2])))
+  }
   var count int64
   count = 0
   for k := 0; k < int(dims[2]); k++ {
