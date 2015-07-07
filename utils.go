@@ -11,6 +11,9 @@ import (
   "compress/gzip"
   "bytes"
   "math"
+  "sync"
+  //"runtime"
+  "time"
   "encoding/binary"
   //"image/color"
   _  "image/jpeg"
@@ -175,7 +178,7 @@ func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
   }
   file.Sync()
   if int64(ntotal) != int64(dims[0])*int64(dims[1])*int64(dims[2]) {
-    p(fmt.Sprintf("Error: could not read all data from file, found %d but wanted to read %d", ntotal, int64(dims[0])*int64(dims[1])*int64(dims[2])))
+    p(fmt.Sprintf("Error: could not read all data from file, found %d but expected to read %d", ntotal, int64(dims[0])*int64(dims[1])*int64(dims[2])))
   }
   var count int64
   count = 0
@@ -708,10 +711,8 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
   thresholds := make([]float32, numsegments-1)
   t := 0
   for i := range cumhist {
-     //fmt.Printf("val: %g\n", float64(cumhist[i])/float64(total))
      if float64(cumhist[i])/float64(total) > float64(borders[t]) {
        thresholds[t] = float32(float64(minVal) + float64(maxVal-minVal)*(float64(i)/float64(len(cumhist)-1.0)))
-       //fmt.Printf("heat threshold value %d is %g hit at index %d\n", t, thresholds[t], i)
        t = t + 1
        if t >= len(borders) {
          break
@@ -730,9 +731,7 @@ func computeDistanceField(field [][][]float32, labels [][][]uint8, simulate []in
           df[k][j][i] = 1
           for l := range thresholds {
             lab := len(thresholds)-1-l
-            //fmt.Printf("check threshold: field %g > threshold %g\n", field[k][j][i], thresholds[lab])
             if field[k][j][i] > thresholds[lab] {
-              //fmt.Printf("OK, set this to label %d\n", lab+1)
               df[k][j][i] = uint8(lab+1)
               break
             }
@@ -807,55 +806,74 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
   }  
   
   // now simulate a couple of iterations
+  //runtime.GOMAXPROCS(runtime.NumCPU())
+  //runtime.GOMAXPROCS(2)
   maxTime := iterations
-  for time := 0; time < maxTime; time++ {
-    if verbose {
-      fmt.Printf("\r%04d/%d", time+1, maxTime)
-    }
+  var elapsed time.Duration
+  elapsed = 0
+  start   := time.Now()
+  for t := 0; t < maxTime; t++ {
+    start = time.Now()
+    var wg sync.WaitGroup
+    wg.Add( (dims[2]-2)*(dims[1]-2) )
+    
     for k := 1; k < dims[2]-1; k++ {
        for j := 1; j < dims[1]-1; j++ {
          copy(tmp[k][j][:],f[k][j][:])
-         for i := 1; i < dims[0]-1; i++ {
-            //tmp[k][j][i] = f[k][j][i]
-            if simThese[k][j][i] != 1 {
-              continue
-            }
-            var val111 = f[ k ][j][i]
-            var val101 = f[k][j-1][i]
-            var val121 = f[k][j+1][i]
-            var val011 = f[k][j][i-1]
-            var val211 = f[k][j][i+1]
-            var val110 = f[k-1][j][i]
-            var val112 = f[k+1][j][i]
-            // repulsive boundary conditions for all other label
-            if simThese[k][j-1][i] == 2 {
-              val101 = val121
-            }
-            if simThese[k][j+1][i] == 2 {
-              val121 = val211
-            }
-            if simThese[k][j][i-1] == 2 {
-              val011 = val211
-            }
-            if simThese[k][j][i+1] == 2 {
-              val211 = val011
-            }
-            if simThese[k-1][j][i] == 2 {
-              val110 = val112
-            }
-            if simThese[k+1][j][i] == 2 {
-              val112 = val110
-            }
-            tmp[k][j][i] = float32(1.0-6.0*omega)*val111 + omega*(val101 + val121 + val011 + val211 + val110 + val112)            
-         }
+         
+         // We can run the following loop in a go routine, maybe that will speed things up?
+         // it would be faster only to use a list of voxel to simulate (instead of testing every
+         // voxel)
+         go func(k int, j int) {         
+             defer wg.Done()
+             for i := 1; i < dims[0]-1; i++ {
+                //tmp[k][j][i] = f[k][j][i]
+                if simThese[k][j][i] != 1 {
+                  continue
+                }
+                var val111 = f[ k ][j][i]
+                var val101 = f[k][j-1][i]
+                var val121 = f[k][j+1][i]
+                var val011 = f[k][j][i-1]
+                var val211 = f[k][j][i+1]
+                var val110 = f[k-1][j][i]
+                var val112 = f[k+1][j][i]
+                // repulsive boundary conditions for all other label
+                if simThese[k][j-1][i] == 2 {
+                  val101 = val121
+                }
+                if simThese[k][j+1][i] == 2 {
+                  val121 = val211
+                }
+                if simThese[k][j][i-1] == 2 {
+                  val011 = val211
+                }
+                if simThese[k][j][i+1] == 2 {
+                  val211 = val011
+                }
+                if simThese[k-1][j][i] == 2 {
+                  val110 = val112
+                }
+                if simThese[k+1][j][i] == 2 {
+                  val112 = val110
+                }
+                tmp[k][j][i] = float32(1.0-6.0*omega)*val111 + omega*(val101 + val121 + val011 + val211 + val110 + val112)            
+             }
+         }(k, j)
        }
-    }   
+    }
+    wg.Wait()
     // now copy values over to real dataset
     for k := 0; k < dims[2]; k++ {
        for j := 0; j < dims[1]; j++ {
           copy(f[k][j][0:dims[0]], tmp[k][j][:])
        }
-    }    
+    }
+    elapsed = time.Since(start)
+    if verbose {
+      expected := time.Duration(elapsed.Seconds() * float64(maxTime-(t+1))) * time.Second
+      fmt.Printf("\r%04d/%d (%s/iteration, %s)", t+1, maxTime, elapsed.String(), expected.String())
+    }
   }
   
   // at the end leave only the simulated voxel in the image

@@ -96,3 +96,8 @@ OPTIONS:
    --showAllTemps					Show all voxel temperatures, not just the simulated subset
    --gradient						Create the gradient of the temperature field (nframes=3)
 ```
+
+In order to speed up processing specify a number of cores to be used by the program:
+```
+export GOMAXPROCS=2; heat --verbose on aseg.mgz --t0 1 --t0 2 --t1 4 --s 3 -s 5 --label 3 --gradient
+```
