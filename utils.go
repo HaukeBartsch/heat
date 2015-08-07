@@ -12,6 +12,7 @@ import (
   "bytes"
   "math"
   "sync"
+  "bufio"
   //"runtime"
   "time"
   "encoding/binary"
@@ -27,6 +28,76 @@ type header  struct {
   Mdc [9]float32
   Pxyz [3]float32
 }
+
+func readUCHAR8(file *os.File, s int64) ([]byte,int64) {
+  buf := make([]byte, s)
+  ntotal := int64(0)
+  for {
+    // read several times because Read might decide to stop intermittently
+    buffer := make([]byte, int64(1024)*int64(1024)) // read a little bit
+    n, err := file.Read(buffer)
+    if ntotal + int64(n) > s {
+      n = int(s - ntotal)
+    }
+    
+    // copy to the real buffer buf
+    copy(buf[ntotal:(ntotal+int64(n))], buffer[0:n])
+    ntotal = ntotal + int64(n)
+
+    if err == io.EOF {
+      break;
+    }
+    if err != nil {
+      panic(err)
+    }
+  }
+  file.Sync()
+  return buf, ntotal
+}
+
+// not very elegant, some matlab libraries will not save mgz files
+// as uint8, but as float only. Here we read one of them and convert
+// to uint8 after round, this only works if the float values inside
+// are below 255!
+func readFLOAT(file *os.File, s int64) ([]byte,int64) {
+  s = s * 4
+  buf := make([]byte, s)
+  ntotal := int64(0)
+  for {
+    // read several times because Read might decide to stop intermittently
+    buffer := make([]byte, 4*int64(1024)*int64(1024)) // read a little bit
+    n, err := file.Read(buffer)
+    if ntotal + int64(n) > s {
+      n = int(s - ntotal)
+    }
+    
+    // copy to the real buffer buf
+    copy(buf[ntotal:(ntotal+int64(n))], buffer[0:n])
+    ntotal = ntotal + int64(n)
+
+    if err == io.EOF {
+      break;
+    }
+    if err != nil {
+      panic(err)
+    }
+  }
+  file.Sync()
+  // now decode the buffer (very 4 byte float)
+  ret := make([]byte, int64(s/4))
+  buf2 := bytes.NewReader(buf)
+  var val float32
+  var i int64
+  for i = 0; i < int64(s/4); i++ {
+    err := binary.Read( buf2, binary.BigEndian, &val)
+    if err != nil {
+      panic(err)
+    }
+    ret[i] = byte(math.Floor(float64(val)+0.5))
+  }  
+  return ret, ntotal
+}
+
 
 // read in mgz file - ignores all transformations
 func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
@@ -155,28 +226,16 @@ func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
   
   file.Seek(284, 0)
   // now read in the data (don't need to swap because its all unsigned char)
-  buf := make([]byte, int64(dims[0])*int64(dims[1])*int64(dims[2]))
-  ntotal := int64(0)
-  for {
-    // read several times because Read might decide to stop intermittently
-    buffer := make([]byte, int64(1024)*int64(1024)) // read a little bit
-    n, err := file.Read(buffer)
-    if ntotal + int64(n) > int64(dims[0])*int64(dims[1])*int64(dims[2]) {
-      n = int(int64(dims[0])*int64(dims[1])*int64(dims[2]) - ntotal)
-    }
-    
-    // copy to the real buffer buf
-    copy(buf[ntotal:(ntotal+int64(n))], buffer[0:n])
-    ntotal = ntotal + int64(n)
-
-    if err == io.EOF {
-      break;
-    }
-    if err != nil {
-      panic(err)
-    }
+  var buf []byte
+  var ntotal int64
+  if head.t == 0 {
+    buf, ntotal = readUCHAR8(file, int64(dims[0])*int64(dims[1])*int64(dims[2]))
+  } else  if head.t == 3 {
+    buf, ntotal = readFLOAT(file,  int64(dims[0])*int64(dims[1])*int64(dims[2]))
+  } else {
+    p(fmt.Sprintf("Error: No data could be read because the file format is unknown (neither float nor unsigned char)"));
   }
-  file.Sync()
+  
   if int64(ntotal) != int64(dims[0])*int64(dims[1])*int64(dims[2]) {
     p(fmt.Sprintf("Error: could not read all data from file, found %d but expected to read %d", ntotal, int64(dims[0])*int64(dims[1])*int64(dims[2])))
   }
@@ -237,14 +296,14 @@ func read4( file *os.File ) (int32) {
   return val
 }
 
-func save4( file *os.File, val int32 ) {
+func save4( file *bufio.Writer, val int32 ) {
 
   err := binary.Write(file, binary.BigEndian, val)
   if err != nil {
     panic(err)
   }
 }
-func save4float32( file *os.File, val float32 ) {
+func save4float32( file *bufio.Writer, val float32 ) {
 
   err := binary.Write(file, binary.BigEndian, val)
   if err != nil {
@@ -252,7 +311,7 @@ func save4float32( file *os.File, val float32 ) {
   }
 }
 
-func save2( file *os.File, val int16 ) {
+func save2( file *bufio.Writer, val int16 ) {
 
   err := binary.Write(file, binary.BigEndian, val)
   if err != nil {
@@ -286,12 +345,15 @@ func saveMGH( field [][][]float32, fn string, head header, verbose bool) {
     p(fmt.Sprintf("writing file %s...", fn))
   }
   // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
-  fi, err := os.Create(fn)
+  fiii, err := os.Create(fn)
   if err != nil {
      p(fmt.Sprintf("Error: could not open file %s", fn))
      os.Exit(-1)
   }
-  defer fi.Close()
+  defer fiii.Close()
+  fii := gzip.NewWriter(fiii)
+  fi := bufio.NewWriter(fii)
+  defer fii.Close()
   
   var typ int32
   typ = 3 // save as floating point field
@@ -338,7 +400,7 @@ func saveMGH( field [][][]float32, fn string, head header, verbose bool) {
         }
     }
   }
-  fi.Sync()
+  fi.Flush()
 }
 
 func saveMGHgradient(gradient [][][]float32, fn string, head header, verbose bool) {
@@ -346,12 +408,15 @@ func saveMGHgradient(gradient [][][]float32, fn string, head header, verbose boo
     p(fmt.Sprintf("writing file %s...", fn))
   }
   // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
-  fi, err := os.Create(fn)
+  fiii, err := os.Create(fn)
   if err != nil {
      p(fmt.Sprintf("Error: could not open file %s", fn))
      os.Exit(-1)
   }
-  defer fi.Close()
+  defer fiii.Close()
+  fii := gzip.NewWriter(fiii)
+  fi := bufio.NewWriter(fii)
+  defer fii.Close()
   
   var typ int32
   typ = 3 // save as floating point field
@@ -461,8 +526,6 @@ func saveMGHgradient(gradient [][][]float32, fn string, head header, verbose boo
         }
     }
   }
-  
-  fi.Sync()
 }
 
 
@@ -471,12 +534,15 @@ func saveMGHuint8( field [][][]uint8, fn string, head header, verbose bool) {
     p(fmt.Sprintf("writing file %s...", fn))
   }
   // write the input field to fn, we can take the header from the parent, but we need to change the output type to float (3)
-  fi, err := os.Create(fn)
+  fiii, err := os.Create(fn)
   if err != nil {
      p(fmt.Sprintf("Error: could not open file %s", fn))
      os.Exit(-1)
   }
-  defer fi.Close()
+  defer fiii.Close()
+  fii := gzip.NewWriter(fiii)
+  fi := bufio.NewWriter(fii)
+  defer fii.Close()
   
   var typ int32
   typ = 0 // save as floating point field
@@ -523,7 +589,7 @@ func saveMGHuint8( field [][][]uint8, fn string, head header, verbose bool) {
         }
     }
   }
-  fi.Sync()
+  //fi.Sync()
 }
 
 // three components for each voxel
@@ -804,6 +870,13 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
       }
     }
   }  
+
+  // initially copy the values into the temporary array
+  for k := 1; k < dims[2]-1; k++ {
+     for j := 1; j < dims[1]-1; j++ {
+       copy(tmp[k][j][:],f[k][j][:])
+     }
+  }
   
   // now simulate a couple of iterations
   //runtime.GOMAXPROCS(runtime.NumCPU())
@@ -819,7 +892,7 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
     
     for k := 1; k < dims[2]-1; k++ {
        for j := 1; j < dims[1]-1; j++ {
-         copy(tmp[k][j][:],f[k][j][:])
+         //copy(tmp[k][j][:],f[k][j][:])
          
          // We can run the following loop in a go routine, maybe that will speed things up?
          // it would be faster only to use a list of voxel to simulate (instead of testing every
@@ -872,7 +945,7 @@ func simulate( labels [][][]uint8, temp0 []int, temp1 []int, simulate []int, ome
     elapsed = time.Since(start)
     if verbose {
       expected := time.Duration(elapsed.Seconds() * float64(maxTime-(t+1))) * time.Second
-      fmt.Printf("\r%04d/%d (%s/iteration, %s)", t+1, maxTime, elapsed.String(), expected.String())
+      fmt.Printf("\033[2K %04d/%d (%s/iteration, %s)\r", t+1, maxTime, elapsed.String(), expected.String())
     }
   }
   

@@ -136,18 +136,18 @@ func main() {
              if c.IsSet("label") {
                // save a distance field version of the data (from low to high temperature in uniform intervals
                label := computeDistanceField(field, labels, sim, c.Int("label"), verbose)
-               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_label.mgh")
+               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_label.mgz")
                saveMGHuint8(label, fn, header, verbose)           
              }
              
              if c.IsSet("gradient") {
                // save the gradient of the temperature field
                gradient := computeGradientField(field, labels, sim)
-               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_gradient.mgh")
+               fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_gradient.mgz")
                saveMGHgradient(gradient, fn, header, verbose)
              }
              
-             fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_temperatur.mgh")
+             fn    := path.Join(d, f[0:len(f)-len(path.Ext(f))] + "_temperatur.mgz")
              saveMGH(field, fn, header, verbose)
            }
          },
