@@ -176,15 +176,15 @@ func readMGH( fn string, verbose bool ) ( [][][]uint8, header ) {
     p(fmt.Sprintf("Error: this version of mgz is not supported"))
   }
  
-  if head.t != 0 {
-    p(fmt.Sprintf("Error: this program only support files with unsigned character encoding"))
+  if head.t != 0 && head.t != 3 {
+    p(fmt.Sprintf("Error: this program only supports files with unsigned character or 32bit floating point encoding"))
   }
   
   if head.nframes != 1 {
     p(fmt.Sprintf("Warning: only the first frame will be read"))    
   }
   
-  if head.t != 0 {
+  if head.t != 0 && head.t != 3 {
     p(fmt.Sprintf("Error: could not find unsigned char field (0) but found %d", head.t))
   }
   
